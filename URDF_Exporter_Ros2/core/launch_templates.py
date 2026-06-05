@@ -11,7 +11,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     share_dir = get_package_share_directory('%s')
 
-    xacro_file = os.path.join(share_dir, 'urdf', '%s.xacro')
+    xacro_file = os.path.join(share_dir, 'urdf', '%s', '%s.xacro')
     robot_description_config = xacro.process_file(xacro_file)
     robot_urdf = robot_description_config.toxml()
 
@@ -78,7 +78,7 @@ from ament_index_python.packages import get_package_share_directory
 def generate_launch_description():
     share_dir = get_package_share_directory('%s')
 
-    xacro_file = os.path.join(share_dir, 'urdf', '%s.xacro')
+    xacro_file = os.path.join(share_dir, 'urdf', '%s', '%s.xacro')
     robot_description_config = xacro.process_file(xacro_file)
     robot_urdf = robot_description_config.toxml()
 
@@ -141,8 +141,8 @@ def generate_launch_description():
 
 
 def get_display_launch_text(package_name, robot_name):
-    return display_launch % (package_name, robot_name)
+    return display_launch % (package_name, robot_name, robot_name)
 
 
 def get_gazebo_launch_text(package_name, robot_name):
-    return gazebo_launch % (package_name, robot_name, robot_name)
+    return gazebo_launch % (package_name, robot_name, robot_name, robot_name)

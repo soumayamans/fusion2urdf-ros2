@@ -9,7 +9,9 @@ import adsk, adsk.core, adsk.fusion
 import os.path, re
 from xml.etree import ElementTree
 from xml.dom import minidom
-from distutils.dir_util import copy_tree
+# from distutils.dir_util import copy_tree
+from shutil import copytree
+
 import fileinput
 import sys
 
@@ -33,7 +35,9 @@ def copy_occs(root):
             occs.component.name = 'old_component'
             new_occs.component.name = 'base_link'
         else:
-            new_occs.component.name = re.sub('[ :()]', '_', occs.name)
+            original_name = re.sub('[ :()]+', '_', occs.component.name).strip('_')
+            occs.component.name = 'old_component'
+            new_occs.component.name = original_name
         new_occs = allOccs.item((allOccs.count-1))
         for i in range(bodies.count):
             body = bodies.item(i)
@@ -51,9 +55,9 @@ def copy_occs(root):
         occs.component.name = 'old_component'
 
 
-def export_stl(design, save_dir, components):
+def export_stl(design, save_dir, components, robot_name):
     """
-    export stl files into "sace_dir/"
+    export stl files into "save_dir/meshes/<robot_name>/"
 
 
     Parameters
@@ -62,14 +66,17 @@ def export_stl(design, save_dir, components):
     save_dir: str
         directory path to save
     components: design.allComponents
+    robot_name: str
+        robot name used as a subdirectory under save_dir
     """
 
     # create a single exportManager instance
     exportMgr = design.exportManager
-    # get the script location
     try: os.mkdir(save_dir + '/meshes')
     except: pass
-    scriptDir = save_dir + '/meshes'
+    try: os.mkdir(save_dir + '/meshes/' + robot_name)
+    except: pass
+    scriptDir = save_dir + '/meshes/' + robot_name
     # export the occurrence one by one in the component to a specified file
     for component in components:
         allOccus = component.allOccurrences
@@ -167,7 +174,8 @@ def create_package(package_name, save_dir, package_dir):
     try: os.mkdir(save_dir + '/test')
     except: pass
 
-    copy_tree(package_dir, save_dir)
+    # copy_tree(package_dir, save_dir)
+    copytree(package_dir, save_dir, dirs_exist_ok=True)
 
 def update_setup_py(save_dir, package_name):
     file_name = save_dir + '/setup.py'

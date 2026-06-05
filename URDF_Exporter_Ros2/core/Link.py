@@ -11,18 +11,18 @@ from ..utils import utils
 
 class Link:
 
-    def __init__(self, name, xyz, center_of_mass, repo, mass, inertia_tensor):
+    def __init__(self, name, xyz, center_of_mass, repo, mass, inertia_tensor, visual_rpy=None):
         """
         Parameters
         ----------
         name: str
             name of the link
         xyz: [x, y, z]
-            coordinate for the visual and collision
+            visual/collision origin position in the link frame
         center_of_mass: [x, y, z]
-            coordinate for the center of mass
-        link_xml: str
-            generated xml describing about the link
+            center of mass in the link frame
+        visual_rpy: [r, p, y]
+            visual/collision origin orientation in the link frame (radians)
         repo: str
             the name of the repository to save the xml file
         mass: float
@@ -31,9 +31,8 @@ class Link:
             tensor of the inertia
         """
         self.name = name
-        # xyz for visual
-        self.xyz = [-_ for _ in xyz]  # reverse the sign of xyz
-        # xyz for center of mass
+        self.xyz = xyz
+        self.visual_rpy = visual_rpy if visual_rpy is not None else [0.0, 0.0, 0.0]
         self.center_of_mass = center_of_mass
         self.link_xml = None
         self.repo = repo
@@ -65,20 +64,20 @@ class Link:
         # visual
         visual = SubElement(link, 'visual')
         origin_v = SubElement(visual, 'origin')
-        origin_v.attrib = {'xyz':' '.join([str(_) for _ in self.xyz]), 'rpy':'0 0 0'}
+        origin_v.attrib = {'xyz':' '.join([str(_) for _ in self.xyz]), 'rpy':' '.join([str(_) for _ in self.visual_rpy])}
         geometry_v = SubElement(visual, 'geometry')
         mesh_v = SubElement(geometry_v, 'mesh')
-        mesh_v.attrib = {'filename':'file://' + '$(find %s)' % self.pkg_name + self.remain_repo_addr + self.name + '.stl','scale':'0.001 0.001 0.001'}
+        mesh_v.attrib = {'filename':'package://' + self.pkg_name + self.remain_repo_addr + self.name + '.stl','scale':'0.001 0.001 0.001'}
         material = SubElement(visual, 'material')
         material.attrib = {'name':'silver'}
         
         # collision
         collision = SubElement(link, 'collision')
         origin_c = SubElement(collision, 'origin')
-        origin_c.attrib = {'xyz':' '.join([str(_) for _ in self.xyz]), 'rpy':'0 0 0'}
+        origin_c.attrib = {'xyz':' '.join([str(_) for _ in self.xyz]), 'rpy':' '.join([str(_) for _ in self.visual_rpy])}
         geometry_c = SubElement(collision, 'geometry')
         mesh_c = SubElement(geometry_c, 'mesh')
-        mesh_c.attrib = {'filename':'file://' + '$(find %s)' % self.pkg_name + self.remain_repo_addr + self.name + '.stl','scale':'0.001 0.001 0.001'}
+        mesh_c.attrib = {'filename':'package://' + self.pkg_name + self.remain_repo_addr + self.name + '.stl','scale':'0.001 0.001 0.001'}
 
         # print("\n".join(utils.prettify(link).split("\n")[1:]))
         self.link_xml = "\n".join(utils.prettify(link).split("\n")[1:])
@@ -100,16 +99,23 @@ def make_inertial_dict(root, msg):
     msg: str
         Tell the status
     """
-    # Get component properties.      
+    # Get component properties.
     allOccs = root.occurrences
     inertial_dict = {}
-    
+
+    seen_names = set()
+    for occs in allOccs:
+        name = re.sub('[ :()]+', '_', occs.component.name).strip('_')
+        if name in seen_names:
+            return {}, 'Duplicate component name "{}". All occurrences must have unique component names.'.format(name)
+        seen_names.add(name)
+
     for occs in allOccs:
         # Skip the root component.
         occs_dict = {}
         prop = occs.getPhysicalProperties(adsk.fusion.CalculationAccuracy.VeryHighCalculationAccuracy)
         
-        occs_dict['name'] = re.sub('[ :()]', '_', occs.name)
+        occs_dict['name'] = re.sub('[ :()]+', '_', occs.component.name).strip('_')
 
         mass = prop.mass  # kg
         occs_dict['mass'] = mass
@@ -124,6 +130,6 @@ def make_inertial_dict(root, msg):
         if occs.component.name == 'base_link':
             inertial_dict['base_link'] = occs_dict
         else:
-            inertial_dict[re.sub('[ :()]', '_', occs.name)] = occs_dict
+            inertial_dict[re.sub('[ :()]+', '_', occs.component.name).strip('_')] = occs_dict
 
     return inertial_dict, msg

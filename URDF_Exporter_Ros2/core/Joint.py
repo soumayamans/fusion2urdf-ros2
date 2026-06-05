@@ -5,12 +5,45 @@ Created on Sun May 12 20:17:17 2019
 @author: syuntoku
 """
 
-import adsk, re
+import adsk, re, math
 from xml.etree.ElementTree import Element, SubElement
 from ..utils import utils
 
+
+_IDENTITY_3 = [1,0,0, 0,1,0, 0,0,1]  # flat row-major 3x3 identity
+
+
+def _rot3(M):
+    """Extract flat 9-element row-major rotation matrix from a Fusion 16-element transform."""
+    return [M[0],M[1],M[2], M[4],M[5],M[6], M[8],M[9],M[10]]
+
+
+def _rmat_to_rpy(R):
+    """Decompose flat row-major 3x3 rotation matrix into URDF extrinsic-XYZ [roll, pitch, yaw]."""
+    sy = math.sqrt(R[0]*R[0] + R[3]*R[3])
+    if sy > 1e-6:
+        roll  = math.atan2( R[7],  R[8])
+        pitch = math.atan2(-R[6],  sy)
+        yaw   = math.atan2( R[3],  R[0])
+    else:
+        roll  = math.atan2(-R[5],  R[4])
+        pitch = math.atan2(-R[6],  sy)
+        yaw   = 0.0
+    # round() can produce -0.0 — normalise to 0.0
+    vals = [round(roll, 6), round(pitch, 6), round(yaw, 6)]
+    return [0.0 if v == 0.0 else v for v in vals]
+
+
+def _rtranspose_mul_vec(R, v):
+    """Compute R^T * v where R is flat 9-element row-major and v is a 3-element list."""
+    return [
+        R[0]*v[0] + R[3]*v[1] + R[6]*v[2],
+        R[1]*v[0] + R[4]*v[1] + R[7]*v[2],
+        R[2]*v[0] + R[5]*v[1] + R[8]*v[2],
+    ]
+
 class Joint:
-    def __init__(self, name, xyz, axis, parent, child, joint_type, upper_limit, lower_limit):
+    def __init__(self, name, xyz, axis, parent, child, joint_type, upper_limit, lower_limit, rpy=None):
         """
         Attributes
         ----------
@@ -34,6 +67,7 @@ class Joint:
         self.name = name
         self.type = joint_type
         self.xyz = xyz
+        self.rpy = rpy if rpy is not None else [0.0, 0.0, 0.0]
         self.parent = parent
         self.child = child
         self.joint_xml = None
@@ -50,7 +84,7 @@ class Joint:
         joint.attrib = {'name':self.name, 'type':self.type}
         
         origin = SubElement(joint, 'origin')
-        origin.attrib = {'xyz':' '.join([str(_) for _ in self.xyz]), 'rpy':'0 0 0'}
+        origin.attrib = {'xyz':' '.join([str(_) for _ in self.xyz]), 'rpy':' '.join([str(_) for _ in self.rpy])}
         parent = SubElement(joint, 'parent')
         parent.attrib = {'link':self.parent}
         child = SubElement(joint, 'child')
@@ -98,7 +132,7 @@ class Joint:
         self.tran_xml = "\n".join(utils.prettify(tran).split("\n")[1:])
 
 
-def make_joints_dict(root, msg):
+def make_joints_dict(root, msg, joint_axis_overrides=None):
     """
     joints_dict holds parent, axis and xyz informatino of the joints
     
@@ -168,12 +202,38 @@ def make_joints_dict(root, msg):
                 break
         elif joint_type == 'fixed':
             pass
-        
+
+        # Derive joint frame orientation and axis from the component occurrence transforms.
+        # occurrenceOne = child component, occurrenceTwo = parent component.
+        # R_rel = R_parent^T * R_child  →  child frame expressed in parent frame  →  joint rpy.
+        # axis must be re-expressed in the child (= joint) frame: R_child^T * axis_world.
+        # R_child and R_parent are stored so Write.py can correct link visual origins and xyz.
+        joint_dict['rpy'] = [0.0, 0.0, 0.0]
+        joint_dict['R_child'] = list(_IDENTITY_3)
+        joint_dict['R_parent'] = list(_IDENTITY_3)
+        try:
+            Rc = _rot3(joint.occurrenceOne.transform.asArray())   # child
+            Rp = _rot3(joint.occurrenceTwo.transform.asArray())   # parent
+            # R_rel[i*3+j] = sum(Rp[k*3+i] * Rc[k*3+j] for k in range(3))
+            R_rel = [sum(Rp[k*3+i] * Rc[k*3+j] for k in range(3))
+                     for i in range(3) for j in range(3)]
+            joint_dict['rpy'] = _rmat_to_rpy(R_rel)
+            joint_dict['R_child'] = Rc
+            joint_dict['R_parent'] = Rp
+            if joint_dict['axis'] != [0, 0, 0]:
+                joint_dict['axis'] = [round(v, 6) for v in
+                                      _rtranspose_mul_vec(Rc, joint_dict['axis'])]
+        except Exception:
+            pass
+
+        if joint_axis_overrides and joint.name in joint_axis_overrides:
+            joint_dict['axis'] = joint_axis_overrides[joint.name]
+
         if joint.occurrenceTwo.component.name == 'base_link':
             joint_dict['parent'] = 'base_link'
         else:
-            joint_dict['parent'] = re.sub('[ :()]', '_', joint.occurrenceTwo.name)
-        joint_dict['child'] = re.sub('[ :()]', '_', joint.occurrenceOne.name)
+            joint_dict['parent'] = re.sub('[ :()]+', '_', joint.occurrenceTwo.component.name).strip('_')
+        joint_dict['child'] = re.sub('[ :()]+', '_', joint.occurrenceOne.component.name).strip('_')
         
         
         #There seem to be a problem with geometryOrOriginTwo. To calcualte the correct orogin of the generated stl files following approach was used.

@@ -18,6 +18,24 @@ from .core import Link, Joint, Write
 
 # I'm not sure how prismatic joint acts if there is no limit in fusion model
 
+# Override the rotation/slide axis for specific joints after automatic computation.
+# Use this for mirrored joints (e.g. wheels on opposite sides) where Fusion reports
+# the same axis direction but you need one side negated.
+# Values are expressed in the joint frame.
+# Per-joint axis overrides.
+# The axis is expressed in the joint frame (after rpy is applied).
+# Use this when Fusion reports the same axis for mirrored joints that should
+# spin in opposite directions — e.g. wheels on opposite sides of a robot.
+#
+# Example:
+#   'wheel_nw': [0, 1, 0],   # flip from [0,-1,0] to [0,1,0]
+#   'wheel_sw': [0, 1, 0],
+JOINT_AXIS_OVERRIDES = {
+    # 'your_joint_name': [x, y, z],
+    'wheel_se': [0.0, 1.0, 0.0],
+    'wheel_ne': [0.0, 1.0, 0.0]
+}
+
 def run(context):
     ui = None
     success_msg = 'Successfully create URDF file'
@@ -56,7 +74,7 @@ def run(context):
         # set dictionaries
 
         # Generate joints_dict. All joints are related to root.
-        joints_dict, msg = Joint.make_joints_dict(root, msg)
+        joints_dict, msg = Joint.make_joints_dict(root, msg, JOINT_AXIS_OVERRIDES)
         if msg != success_msg:
             ui.messageBox(msg, title)
             return 0
@@ -90,7 +108,7 @@ def run(context):
 
         # Generate STl files
         utils.copy_occs(root)
-        utils.export_stl(design, save_dir, components)
+        utils.export_stl(design, save_dir, components, robot_name)
 
         ui.messageBox(msg, title)
 
