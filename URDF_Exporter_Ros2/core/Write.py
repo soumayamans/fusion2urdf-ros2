@@ -40,7 +40,8 @@ def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
         link = Link.Link(name='base_link', xyz=[0,0,0],
             center_of_mass=center_of_mass, repo=repo,
             mass=inertial_dict['base_link']['mass'],
-            inertia_tensor=inertial_dict['base_link']['inertia'])
+            inertia_tensor=inertial_dict['base_link']['inertia'],
+            prefix='${prefix}')
         links_xyz_dict['base_link'] = [0.0, 0.0, 0.0]  # world position
         link.make_link_xml()
         f.write(link.link_xml)
@@ -67,7 +68,8 @@ def write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
             link = Link.Link(name=name, xyz=visual_xyz, visual_rpy=visual_rpy,
                 center_of_mass=center_of_mass,
                 repo=repo, mass=inertial_dict[name]['mass'],
-                inertia_tensor=inertial_dict[name]['inertia'])
+                inertia_tensor=inertial_dict[name]['inertia'],
+                prefix='${prefix}')
             links_xyz_dict[name] = joint_xyz  # store world position for joint xyz computation
             link.make_link_xml()
             f.write(link.link_xml)
@@ -115,7 +117,8 @@ to swap component1<=>component2"
                 quit()
 
             joint = Joint.Joint(name=j, joint_type=joint_type, xyz=xyz,
-                axis=joints_dict[j]['axis'], parent=parent, child=child,
+                axis=joints_dict[j]['axis'],
+                parent='${prefix}' + parent, child='${prefix}' + child,
                 upper_limit=upper_limit, lower_limit=lower_limit,
                 rpy=joints_dict[j].get('rpy', [0.0, 0.0, 0.0]))
             joint.make_joint_xml()
@@ -133,6 +136,7 @@ def write_gazebo_endtag(file_name):
         urdf full path
     """
     with open(file_name, mode='a') as f:
+        f.write('\n')
         f.write('</robot>\n')
 
 
@@ -148,11 +152,9 @@ def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_n
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro">\n'.format(robot_name))
         f.write('\n')
-        f.write('<xacro:include filename="$(find {})/urdf/{}/materials.xacro" />'.format(package_name, robot_name))
-        f.write('\n')
-        f.write('<xacro:include filename="$(find {})/urdf/{}/{}.trans" />'.format(package_name, robot_name, robot_name))
-        f.write('\n')
-        f.write('<xacro:include filename="$(find {})/urdf/{}/{}.gazebo" />'.format(package_name, robot_name, robot_name))
+        f.write('<xacro:include filename="$(find {})/urdf/common.xacro" />\n'.format(package_name))
+        f.write('<xacro:include filename="$(find {})/urdf/{}/{}.trans" />\n'.format(package_name, robot_name, robot_name))
+        f.write('<xacro:include filename="$(find {})/urdf/{}/{}.gazebo" />\n'.format(package_name, robot_name, robot_name))
         f.write('\n')
 
     write_link_urdf(joints_dict, repo, links_xyz_dict, file_name, inertial_dict)
@@ -162,10 +164,8 @@ def write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_n
 def write_materials_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir):
     try: os.mkdir(save_dir + '/urdf')
     except: pass
-    try: os.mkdir(save_dir + '/urdf/' + robot_name)
-    except: pass
 
-    file_name = save_dir + '/urdf/' + robot_name + '/materials.xacro'  # the name of urdf file
+    file_name = save_dir + '/urdf/common.xacro'  # the name of urdf file
     with open(file_name, mode='w') as f:
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro" >\n'.format(robot_name))
@@ -198,7 +198,6 @@ def write_transmissions_xacro(joints_dict, links_xyz_dict, inertial_dict, packag
         f.write('<?xml version="1.0" ?>\n')
         f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro" >\n'.format(robot_name))
         f.write('\n')
-
         for j in joints_dict:
             if joints_dict[j]['type'] == 'fixed':
                 continue
@@ -224,7 +223,6 @@ def write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name,
         f.write('\n')
         f.write('<xacro:property name="body_color" value="Gazebo/Silver" />\n')
         f.write('\n')
-
         gazebo = Element('gazebo')
         plugin = SubElement(gazebo, 'plugin')
         plugin.attrib = {'name':'control', 'filename':'libgazebo_ros_control.so'}
@@ -232,7 +230,7 @@ def write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name,
         f.write(gazebo_xml)
 
         # for base_link
-        f.write('<gazebo reference="base_link">\n')
+        f.write('<gazebo reference="${prefix}base_link">\n')
         f.write('  <material>${body_color}</material>\n')
         f.write('  <mu1>0.2</mu1>\n')
         f.write('  <mu2>0.2</mu2>\n')
@@ -244,7 +242,7 @@ def write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name,
         # others
         for joint in joints_dict:
             name = joints_dict[joint]['child']
-            f.write('<gazebo reference="{}">\n'.format(name))
+            f.write('<gazebo reference="${{prefix}}{}">\n'.format(name))
             f.write('  <material>${body_color}</material>\n')
             f.write('  <mu1>0.2</mu1>\n')
             f.write('  <mu2>0.2</mu2>\n')
@@ -252,6 +250,23 @@ def write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name,
             f.write('</gazebo>\n')
             f.write('\n')
 
+        f.write('</robot>\n')
+
+def write_urdf_xacro(package_name, robot_name, save_dir):
+    try: os.mkdir(save_dir + '/urdf')
+    except: pass
+
+    file_name = save_dir + '/urdf/' + robot_name + '.urdf.xacro'
+    with open(file_name, mode='w') as f:
+        f.write('<?xml version="1.0" ?>\n')
+        f.write('<robot name="{}" xmlns:xacro="http://www.ros.org/wiki/xacro">\n'.format(robot_name))
+        f.write('\n')
+        f.write('  <xacro:arg name="prefix" default="" />\n')
+        f.write('  <xacro:property name="prefix" value="$(arg prefix)" />\n')
+        f.write('\n')
+        f.write('  <xacro:include filename="$(find {})/urdf/common.xacro" />\n'.format(package_name))
+        f.write('  <xacro:include filename="$(find {})/urdf/{}/{}.xacro" />\n'.format(package_name, robot_name, robot_name))
+        f.write('\n')
         f.write('</robot>\n')
 
 def write_display_launch(package_name, robot_name, save_dir):

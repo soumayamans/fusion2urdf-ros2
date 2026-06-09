@@ -57,8 +57,19 @@ def run(context):
         components = design.allComponents
 
         # set the names
-        robot_name = root.name.split()[0]
-        package_name = robot_name + '_description'
+        default_robot = root.name.split()[0]
+        robot_name, cancelled = ui.inputBox('Robot name', title, default_robot)
+        if cancelled:
+            ui.messageBox('Fusion2URDF was canceled', title)
+            return 0
+        robot_name = robot_name.strip()
+
+        package_name, cancelled = ui.inputBox('Package name', title, robot_name + '_description')
+        if cancelled:
+            ui.messageBox('Fusion2URDF was canceled', title)
+            return 0
+        package_name = package_name.strip()
+
         save_dir = utils.file_dialog(ui)
         if save_dir == False:
             ui.messageBox('Fusion2URDF was canceled', title)
@@ -94,6 +105,7 @@ def run(context):
         # --------------------
         # Generate URDF
         Write.write_urdf(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
+        Write.write_urdf_xacro(package_name, robot_name, save_dir)
         Write.write_materials_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
         Write.write_transmissions_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)
         Write.write_gazebo_xacro(joints_dict, links_xyz_dict, inertial_dict, package_name, robot_name, save_dir)

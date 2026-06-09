@@ -11,12 +11,12 @@ from ..utils import utils
 
 class Link:
 
-    def __init__(self, name, xyz, center_of_mass, repo, mass, inertia_tensor, visual_rpy=None):
+    def __init__(self, name, xyz, center_of_mass, repo, mass, inertia_tensor, visual_rpy=None, prefix=''):
         """
         Parameters
         ----------
         name: str
-            name of the link
+            name of the link (used for mesh filename)
         xyz: [x, y, z]
             visual/collision origin position in the link frame
         center_of_mass: [x, y, z]
@@ -29,8 +29,11 @@ class Link:
             mass of the link
         inertia_tensor: [ixx, iyy, izz, ixy, iyz, ixz]
             tensor of the inertia
+        prefix: str
+            prepended to the link name in generated XML; mesh filename uses bare name
         """
         self.name = name
+        self.xml_name = prefix + name
         self.xyz = xyz
         self.visual_rpy = visual_rpy if visual_rpy is not None else [0.0, 0.0, 0.0]
         self.center_of_mass = center_of_mass
@@ -47,7 +50,7 @@ class Link:
         """
         
         link = Element('link')
-        link.attrib = {'name':self.name}
+        link.attrib = {'name':self.xml_name}
         
         #inertial
         inertial = SubElement(link, 'inertial')
